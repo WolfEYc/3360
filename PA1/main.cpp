@@ -1,4 +1,4 @@
-#include <thread>
+#include <pthread.h>
 #include <cmath>
 #include <sstream>
 #include <string>
@@ -11,12 +11,17 @@ using namespace std;
 class Decompressor;
 class Resolver;
 
+using ThreadArguments = tuple<Decompressor&, string, char&>;
+
 class Resolver
 {
 private:
-    thread* _th;
+    pthread_t _threadID;
+    ThreadArguments* args;
+    char output;
 public:
-    Resolver(string input, char& output, Decompressor& decompressor);
+    char resolve();
+    Resolver(string input, Decompressor& decompressor);
     ~Resolver();
 };
 
@@ -29,10 +34,11 @@ private:
     map<char, pair<string, unsigned int>> store;
     map<char, atomic<unsigned int>> freq;
     string output;
+    string order;
     void inputAlpha();
     void readMsg();
 public:
-    void decode(string input, char& output);
+    friend void* decode(void* args);
     Decompressor();
     const unsigned int& getBPC() const;
     void decompress();
@@ -43,17 +49,19 @@ public:
 string dtob (unsigned int dec, const unsigned int bits)
 {
     string result(bits, '0');
-    for(int i = 0; dec > 0; i++, dec /= 2)
+    for(int i = 0; i != bits; i++, dec /= 2)
     {
-        result[bits - i - 1] = ((char)dec % 2 + '0');
+        result[bits - i - 1] = ((char)(dec % 2)) + '0';
     }
     return result;
 }
 
-void Decompressor::decode (string input, char& output)
+void *decode (void *args)
 {
-    output = alpha[input];
-    freq.at(output)++;
+    auto& [decompressor, input, output] = *((ThreadArguments*) args);
+    output = decompressor.alpha.at(input);
+    decompressor.freq.at(output)++;
+    pthread_exit(NULL);
 }
 
 Decompressor::Decompressor() : output() {}
@@ -62,13 +70,20 @@ Decompressor::~Decompressor() {}
 void Decompressor::inputAlpha() {
     cin >> _n;
     char c;
+    string s;
     unsigned int code, h = 0, i;
+    getline(cin, s);
+    //cout << s << endl;
     for(i = 0; i != _n; i++) {
-        cin >> c >> code;
+        getline(cin, s);
+        //cout << s << endl;
+        c = s[0];
+        code = stoi(s.substr(2));
         //symbol -> dec, freq
         auto& [binary, decimal] = store[c];
         decimal = code;
         freq[c];
+        order += c;
         
         if (code > h) {
             h = code;
@@ -94,7 +109,6 @@ void Decompressor::readMsg() {
     stringstream ss(s);
 
     while(good) {
-        output.resize(output.size() + 1);
         string temp;
         temp.resize(bpc);
         for(int i = 0; i != bpc; i++) {
@@ -105,10 +119,11 @@ void Decompressor::readMsg() {
         }
         if(!good) break;
 
-        resolverQ.push(new Resolver(temp, output.back(), *this));
+        resolverQ.push(new Resolver(temp, *this));
     }
 
     while(!resolverQ.empty()) {
+        output += resolverQ.front()->resolve();
         delete resolverQ.front();
         resolverQ.pop();
     }
@@ -123,23 +138,31 @@ void Decompressor::decompress()
 
 void Decompressor::print_results()
 {
-    cout << endl << "Alphabet:" << endl;
-    for(auto& [symbol, data] : store) {
-        auto& [binary, decimal] = data;
+    cout << "Alphabet:" << endl;
+    for(char symbol : order) {
+        auto& [binary, decimal] = store[symbol];
         cout << "Character: " << symbol << ", Code: " << binary << ", Frequency: " << freq[symbol] << endl;
     }
+    
     cout << endl
-    << "Decompressed message: " << output << endl;
+    << "Decompressed message: " << output;
 }
 
-Resolver::Resolver(string input, char& output, Decompressor& decompressor) 
+Resolver::Resolver(string input, Decompressor& decompressor) 
 {
-    _th = new thread(&Decompressor::decode, &decompressor, input, ref(output));
+    args = new ThreadArguments(decompressor, input, output);
+    pthread_create(&_threadID, NULL, decode, args);
 }
 
-Resolver::~Resolver() {
-    _th->join();
-    delete _th;
+char Resolver::resolve() 
+{
+    pthread_join(_threadID, NULL);
+    return output;
+}
+
+Resolver::~Resolver() 
+{
+    delete args;
 }
 
 int main () 
@@ -147,7 +170,7 @@ int main ()
     Decompressor decompressor;
     decompressor.decompress();
 
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 
