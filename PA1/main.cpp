@@ -73,21 +73,18 @@ void Decompressor::inputAlpha() {
     string s;
     unsigned int code, h = 0, i;
     getline(cin, s);
-    //cout << s << endl;
+
     for(i = 0; i != _n; i++) {
         getline(cin, s);
-        //cout << s << endl;
         c = s[0];
         code = stoi(s.substr(2));
-        //symbol -> dec, freq
+
         auto& [binary, decimal] = store[c];
         decimal = code;
         freq[c];
         order += c;
         
-        if (code > h) {
-            h = code;
-        }
+        if (code > h) h = code;
     }
     //bits per char
     bpc = ceil(log2(h));
@@ -95,9 +92,7 @@ void Decompressor::inputAlpha() {
     for(auto& [symbol, data] : store)
     {
         auto& [binary, decimal] = data;
-        //extract code
         binary = dtob(decimal, bpc);
-        //binary -> symbol
         alpha[binary] = symbol;
     }
 }
@@ -143,7 +138,6 @@ void Decompressor::print_results()
         auto& [binary, decimal] = store[symbol];
         cout << "Character: " << symbol << ", Code: " << binary << ", Frequency: " << freq[symbol] << endl;
     }
-    
     cout << endl
     << "Decompressed message: " << output;
 }
@@ -169,8 +163,5 @@ int main ()
 {
     Decompressor decompressor;
     decompressor.decompress();
-
     return EXIT_SUCCESS;
 }
-
-
