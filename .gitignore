@@ -2,4 +2,3 @@
 bin/
 Makefile
 Makefile.in
-*.txt
