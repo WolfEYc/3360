@@ -5,3 +5,4 @@ compile:
 
 run:
 	bin/main
+
