@@ -32,7 +32,6 @@ namespace MyClient
         int bytesRead;
         sockaddr_in server_address;
         Query query;
-
     public:
         Socket(string hostname, int port)
         {
@@ -48,7 +47,7 @@ namespace MyClient
                 cerr << "Invalid address" << endl;
                 return;
             }
-            if (connect(id, (sockaddr *)&server_address, sizeof(server_address)) < 0)
+            if (connect(id, (sockaddr*)&server_address, sizeof(server_address)) < 0)
             {
                 cerr << "Connection Failed" << endl;
                 return;
@@ -70,12 +69,17 @@ namespace MyClient
             query.eventType = TRANSLATE_CODE;
             query.msg = code;
             send(id, query.ToString(), sizeof(query.ToString()), 0);
-            bytesRead = read(id, (void *)&response, sizeof(char));
+            bytesRead = read(id, (void*)&response, sizeof(char));
             return response;
+        }
+
+        ~Socket()
+        {
+            close(id);
         }
     };
 
-    typedef void *(*THREADFUNCPTR)(void *);
+    typedef void*(*THREADFUNCPTR)(void*);
 
     class Translator
     {
@@ -86,10 +90,11 @@ namespace MyClient
         string hostname;
         int port;
         pthread_t tid;
-        void *decode()
+        void* decode()
         {
             Socket socket(hostname, port);
             output = socket.TranslateMessage(input);
+            return nullptr;
         }
 
     public:
@@ -120,16 +125,56 @@ namespace MyClient
     private:
         string hostname;
         int port;
+        int codeLength;
+        string code;
+        int numchars;
         queue<Translator> translators;
+        void GetCodeLength()
+        {
+            Socket socket(hostname, port);
+            codeLength = socket.GetCodeLength();
+        }
         void ReadFromInput()
         {
-        }
+            cin >> code;
+            numchars = code.length() / codeLength;
 
+            for(int i = 0, pos; i != numchars; i++)
+            {
+                pos = i * codeLength;
+                translators.push(Translator(code.substr(pos, pos + codeLength), hostname, port));
+            }
+        }
+        void Output()
+        {
+            cout << "Decompressed message: ";
+            while(!translators.empty())
+            {
+                cout << translators.front().Output();
+                translators.pop();
+            }
+            cout << endl;
+        }
     public:
         Decompressor(string hostname, int port) : hostname(hostname), port(port)
         {
+            GetCodeLength();
             ReadFromInput();
+            Output();
         }
     };
 
+}
+
+int main (int argc, char** argv)
+{
+    if(argc < 3)
+    {
+        cerr << "./exec_filename hostname port_no < input_filename" << endl;
+        return EXIT_FAILURE;
+    }
+    string hostname = argv[1];
+    int port = stoi(argv[2]);
+    MyClient::Decompressor decompressor(hostname, port);
+    return EXIT_SUCCESS;
 }

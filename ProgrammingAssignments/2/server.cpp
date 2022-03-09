@@ -6,6 +6,7 @@
 #include <map>
 #include <cmath>
 #include <iostream>
+
 using namespace std;
 
 namespace MyServer 
@@ -43,6 +44,7 @@ namespace MyServer
         wait(NULL);
     }
 
+    class Server;
     class Socket
     {
     private:
@@ -51,88 +53,13 @@ namespace MyServer
         char buffer[BUF_SIZE];
         sockaddr_in address;
         int addrlen;
-        Server* server;
+        const Server* server;
+        void HandleEvent();
+        void on(EventType event, string msg);
     public:
-        //Passive Socket   
-        Socket(Server* server) : server(server)
-        {
-            addrlen = sizeof(address);
-            if(!(id = socket(domain, type, protocol)))
-            {
-                cerr << "socket creation failed" << endl;
-            }
-            if (setsockopt(id, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
-            {
-                cerr << "setting socket options failed" << endl;
-            }
-            address.sin_family = domain;
-            address.sin_addr.s_addr = hostaddress;
-            address.sin_port = htons(server->port);
-            if(bind(id, (sockaddr*)&address, sizeof(address))<0)
-            {
-                cerr << "socket port binding failed" << endl;
-            }
-            if(listen(id, DEFAULT_BACKLOG) < 0)
-            {
-                cerr << "socket listen failed" << endl;
-            }
-        }
-
-        //Active Socket
-        Socket(const Socket& passive) : server(passive.server)
-        {
-            if((id = accept(passive.id, (sockaddr*)&passive.address, (socklen_t*)&passive.addrlen)) < 0)
-            {
-                cerr << "socket accept failed" << endl;
-            }
-            address = passive.address;
-            addrlen = passive.addrlen;
-            if((bytesRead = read(id, buffer, BUF_SIZE)) <= 0)
-            {
-                cerr << "could not receive message properly" << endl;
-            }
-            else
-            {
-                handleEvent();
-            }
-        }
-
-        void handleEvent()
-        {
-            int pid = fork();
-            if(!pid)
-            {
-                EventType event = (EventType)(buffer[0] - '0');
-                string msg(buffer);
-                if(bytesRead != 1)
-                {
-                    msg = msg.substr(1);
-                }
-                on(event, msg);
-            } 
-            else
-            {
-                signal(SIGCHLD, EndChild);
-            }
-        }
-
-        void on(EventType event, string msg)
-        {
-            switch(event)
-            {
-                case GET_CODELEN:
-                    send(id, (void*)server->codeLen, sizeof(int), 0);
-                    break;
-                case TRANSLATE_CODE:
-                    send(id, (void*)server->rossetta[msg], sizeof(char), 0);
-                    break;
-                default:
-                    cerr << "event unhandled!" << endl;
-                    break;
-            }
-        }
+        Socket(const Server* server);
+        Socket(const Socket& passive);
     };
-
     class Server
     {
     private:
@@ -144,11 +71,14 @@ namespace MyServer
         {
             int n, dec, max = 0;
             char c;
+            cin >> n;
             for(int i = 0; i != n; i++) 
             {
                 cin >> c >> dec;
                 max = dec > max ? dec : max;
-                rossetta[dec2bi(dec)] = c;
+                string bi = dec2bi(dec);
+                cout << bi;
+                rossetta[bi] = c;
             }
             codeLen = ceil(log2(max + 1));
         }
@@ -163,6 +93,89 @@ namespace MyServer
             }
         }
     };
+    
+    
+    //Passive Socket   
+    Socket::Socket(const Server* server) : server(server)
+    {
+        addrlen = sizeof(address);
+        if(!(id = socket(domain, type, protocol)))
+        {
+            cerr << "socket creation failed" << endl;
+        }
+        if (setsockopt(id, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
+        {
+            cerr << "setting socket options failed" << endl;
+        }
+        address.sin_family = domain;
+        address.sin_addr.s_addr = hostaddress;
+        address.sin_port = htons(server->port);
+        if(bind(id, (sockaddr*)&address, sizeof(address))<0)
+        {
+            cerr << "socket port binding failed" << endl;
+        }
+        if(listen(id, DEFAULT_BACKLOG) < 0)
+        {
+            cerr << "socket listen failed" << endl;
+        }
+    }
+
+    //Active Socket
+    Socket::Socket(const Socket& passive) : server(passive.server)
+    {
+        if((id = accept(passive.id, (sockaddr*)&passive.address, (socklen_t*)&passive.addrlen)) < 0)
+        {
+            cerr << "socket accept failed" << endl;
+        }
+        address = passive.address;
+        addrlen = passive.addrlen;
+        if((bytesRead = read(id, buffer, BUF_SIZE)) <= 0)
+        {
+            cerr << "could not receive message properly" << endl;
+        }
+        else
+        {
+            HandleEvent();
+        }
+    }
+
+    void Socket::HandleEvent()
+    {
+        int pid = fork();
+        if(!pid)
+        {
+            EventType event = (EventType)(buffer[0] - '0');
+            string msg(buffer);
+            if(bytesRead != 1)
+            {
+                msg = msg.substr(1);
+            }
+            on(event, msg);
+        } 
+        else
+        {
+            signal(SIGCHLD, EndChild);
+        }
+    }
+
+    void Socket::on(EventType event, string msg)
+    {
+        switch(event)
+        {
+            case GET_CODELEN:
+                
+                send(id, (void*)&server->codeLen, sizeof(int), 0);
+                break;
+            case TRANSLATE_CODE:
+                cout << msg << endl;
+                send(id, (void*)&server->rossetta.at(msg), sizeof(char), 0);
+                break;
+            default:
+                cerr << "event unhandled!" << endl;
+                break;
+        }
+    }
+    
 }
 
 
